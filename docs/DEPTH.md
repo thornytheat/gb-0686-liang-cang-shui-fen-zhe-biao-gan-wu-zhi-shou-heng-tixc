@@ -15,6 +15,16 @@
 | M5 仓批平衡 | 逐仓核对干物质平衡 | `/api/m5` | `app/modules/m5_balance/rules.py` `app/modules/m5_balance/service.py` | `tests/test_m5_balance.py` |
 | M6 结算复核 | 结算到分并保留尾差依据 | `/api/m6` | `app/modules/m6_settlement/rules.py` `app/modules/m6_settlement/service.py` | `tests/test_m6_settlement.py` |
 | M7 批次追溯 | 检查行数平衡与证据摘要 | `/api/m7` | `app/modules/m7_trace/rules.py` `app/modules/m7_trace/service.py` | `tests/test_m7_trace.py` |
+| M8 退收冲销 | 退收单关联原车次与原凭证，仓批只扣一次 | `/m/8`、`/api/returns` | `app/returns/rules.py` `app/returns/repo.py` `app/modules/m8_returns/handler.py` | `tests/test_m8_returns.py` |
+
+## 退收对账口径
+
+固定口径：**按原车次干物质扣回**。
+
+- 仓批：逐项扣减原磅单入库时的 `net_kg/clean_kg/dry_kg/standard_kg/amount`，并减 1 车次；扣回项即当初入库项，仓批干物质恒等式前后不变。
+- 凭证：原应付凭证（`PV-…`）按已开分币金额整单红冲（`RV-…`），金额净额为零；原凭证登记后不再改写。
+- 差额：退收时按仓批复测水分/杂质折出的物理干物质与账面干物质之差，单列为“仓批差额”，归属该仓批，留待仓批损耗复核，不摊给同仓其他车次，也不向农户追补。
+- 状态机：草稿 → 已生效，失败为冲销失败。草稿不写仓批版本；`BEGIN IMMEDIATE` 单事务写仓批新版本与红字凭证，异常整体回滚；`return_effects` 以退收单号为主键保证重试幂等；同一原凭证只能有一张有效红字凭证。
 
 ## 陷阱登记
 
@@ -28,6 +38,9 @@
 | TRAP-14 | 同版矛盾 | 后写覆盖 | 同版均隔离 | `app/modules/m4_truckmerge/rules.py` | `tests/test_m4_truckmerge.py::test_conflict_keeps_neither` |
 | TRAP-15 | 吨与千克 | 数量差千倍 | 统一kg | `app/modules/m2_contract/rules.py` | `tests/test_m2_contract.py::test_unit_ton` |
 | TRAP-24 | 结算尾差 | 分录不守恒 | 最大余额分到分 | `app/modules/m6_settlement/rules.py` | `tests/test_m6_settlement.py::test_largest_remainder_conservation` |
+| TRAP-26 | 退收重复扣减 | 重试再扣一次仓批 | 退收单号幂等 + 单事务 | `app/returns/repo.py` | `tests/test_m8_returns.py::test_retry_does_not_double_deduct` |
+| TRAP-27 | 退收按复测水重重算 | 差额转到其他车次 | 按原车次干物质扣回，差额归仓批 | `app/returns/rules.py` | `tests/test_m8_returns.py::test_variance_owner_is_bin` |
+| TRAP-28 | 红冲改写原凭证 | 对账无依据 | 原凭证只登记不改写，红字整单冲回 | `app/returns/rules.py` | `tests/test_m8_returns.py::test_original_voucher_not_rewritten` |
 
 ## 对账规则
 

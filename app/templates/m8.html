@@ -1,0 +1,70 @@
+{% extends "base.html" %}{% block content %}
+<script src="/static/returns.js" defer></script>
+<div class="grain-columns">
+<section class="panel">
+  <div class="panel__head"><h2>登记退收单</h2><sup>08</sup></div>
+  {% if error %}<p class="state bad">{{error}}</p>{% endif %}
+  <form id="return-form" data-run="{{result.manifest.run_id}}">
+    <label>原车次<select name="truck_id" required>{% for row in trucks %}<option value="{{row.id}}">{{row.id}} · {{row.bin}} · {{row.standard_kg}}</option>{% endfor %}</select></label>
+    <div class="form-grid">
+      <label>退收净重 kg<input name="net_kg" value="" inputmode="decimal" required></label>
+      <label>复测水分 %<input name="moisture" value="" inputmode="decimal" required></label>
+      <label>复测杂质 %<input name="impurity" value="0" inputmode="decimal" required></label>
+    </div>
+    <label>退收原因<input name="reason" value="复检杂质超标" maxlength="80"></label>
+    <button class="btn primary">生成退收单</button>
+  </form>
+  <p class="hint">草稿不进入正式仓账；相同车次与相同复测数据重复提交只生成同一张退收单。</p>
+</section>
+
+<section class="panel span-two">
+  <div class="panel__head"><h2>退收单</h2><span>{{item.return_id if item else '—'}}</span></div>
+  {% if item %}
+  <dl>
+    <dt>状态</dt><dd class="state {{'ok' if item.state=='已生效' else ('bad' if item.state=='冲销失败' else '')}}">{{item.state}}</dd>
+    <dt>原车次</dt><dd>{{item.truck_id}}</dd>
+    <dt>原批次</dt><dd>{{item.run_id}}</dd>
+    <dt>仓批</dt><dd>{{item.bin}}</dd>
+    <dt>扣回口径</dt><dd>{{item.caliber}}</dd>
+    <dt>复测净重/水分/杂质</dt><dd>{{item.return_measure.net_kg}} kg · {{item.return_measure.moisture}}% · {{item.return_measure.impurity}}%</dd>
+    <dt>复测物理干物质</dt><dd>{{item.return_measure.physical_dry_kg}} kg（仅备查，不参与扣回）</dd>
+    <dt>仓批差额</dt><dd>{{item.variance.diff_kg}} kg · 归属 {{item.variance.diff_owner}}</dd>
+    <dt>差额依据</dt><dd>{{item.variance.diff_reason}}，留在原仓批损耗复核，不摊入其他车次，不向农户追补</dd>
+    {% if item.failure %}<dt>失败原因</dt><dd>{{item.failure.code}} · {{item.failure.message}}</dd>{% endif %}
+  </dl>
+  {% if item.state in ['草稿','冲销失败'] %}
+  <form id="post-form" data-return="{{item.return_id}}"><button class="btn primary">提交冲销</button></form>
+  {% elif item.state=='已生效' %}
+  <p class="hint">已生效：仓批只扣一次，重复提交返回同一结果。</p>
+  {% endif %}
+  {% else %}<p class="hint">从左侧选择原车次，填写复检结果后生成退收单。</p>{% endif %}
+</section>
+
+<section class="panel span-three">
+  <div class="panel__head"><h2>凭证对照</h2><span>原凭证不改写 · 红冲净额为零</span></div>
+  {% if item %}
+  {{ledger([item.original, item.red_voucher],['voucher_no','kind','truck_id','net_kg','clean_kg','dry_kg','standard_kg','amount'])}}
+  <dl>
+    <dt>原凭证金额</dt><dd>{{item.reconcile.original_amount}} CNY</dd>
+    <dt>红字冲回</dt><dd>{{item.reconcile.reversal_amount}} CNY</dd>
+    <dt>净额</dt><dd>{{item.reconcile.net_amount}} CNY（{{item.reconcile.status}}）</dd>
+  </dl>
+  {% else %}{{ledger([],['voucher_no','kind','truck_id','amount'])}}{% endif %}
+</section>
+
+<section class="panel span-three">
+  <div class="panel__head"><h2>仓批变化</h2><span>{{result.manifest.run_id}}</span></div>
+  {% if preview %}
+  <p class="hint">草稿未入账：当前 V{{preview[0].version}}（{{preview[0].source}}），提交后将是 V{{preview[1].version}}（{{preview[1].source}}）。</p>
+  {{ledger([preview[0], preview[1]],['bin','version','source','count','net_kg','clean_kg','dry_kg','standard_kg','amount'])}}
+  {% else %}
+  {{ledger(item.bin_history if item else [],['bin','version','source','return_id','count','net_kg','clean_kg','dry_kg','standard_kg','amount'])}}
+  {% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel__head"><h2>本批退收单</h2></div>
+  {% for r in returns %}<a class="history" href="/m/8?return={{r.id}}"><code>{{r.id}}</code><span>{{r.truck_id}} · {{r.state}}</span></a>{% else %}<p class="hint">尚无退收单。</p>{% endfor %}
+</section>
+</div>
+{% endblock %}

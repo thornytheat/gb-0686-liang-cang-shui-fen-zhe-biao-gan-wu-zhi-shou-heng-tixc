@@ -54,6 +54,10 @@ def create_app():
         for row in result["quarantine"]:
             writer.writerow([result["manifest"]["run_id"],row["line"],row["key"],row["code"],json.dumps(row,ensure_ascii=False)])
         return Response("\ufeff"+stream.getvalue(),content_type="text/csv; charset=utf-8",headers={"Content-Disposition":"attachment; filename=evidence.csv"})
+    from app.modules.m8_returns.service import view as return_view
+    @app.get("/m/8")
+    def returns_page(): return return_view(return_id=request.args.get("return"), run_id=request.args.get("run"))
     for n,name in enumerate(STAGES,1): app.register_blueprint(import_module(f"app.modules.m{n}_{name}.handler").bp)
+    app.register_blueprint(import_module("app.modules.m8_returns.handler").bp)
     return app
 app=create_app()
